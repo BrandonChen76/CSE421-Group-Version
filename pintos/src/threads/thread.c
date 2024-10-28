@@ -187,14 +187,14 @@ thread_start (void)
 update_priority(struct thread *t){
   enum intr_level old_level;
   old_level = intr_disable();
-  t->priority = PRI_MAX - ((t->recent_cpu / (4 * SCALAR)) - (t->nice * 2));
+  t->priority = PRI_MAX - (t->recent_cpu / (4 * SCALAR)) - (t->nice * 2);
   if(t->priority < PRI_MIN){
     t->priority = PRI_MIN;
   }
+  else if(t->priority > PRI_MAX){
+    t->priority = PRI_MAX;
+  }
   intr_set_level(old_level);
-  // if(t->priority > thread_current()->priority){
-  //   thread_yield();
-  // }
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -222,15 +222,15 @@ thread_tick (void)
       update_all_recent_cpu();
     }
     //Update priority every 4 ticks
-    if(timer_ticks() % 4 == 0){
+    if(timer_ticks() % TIME_SLICE == 0){
       thread_foreach(update_priority, NULL);
       list_sort(&ready_list, thread_priority_compare, NULL);
-      if(!list_empty(&ready_list)){
-        struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
-        if(highest_priority_thread->priority > thread_current()->priority){
-          thread_yield();
-        }
-      }
+      // if(!list_empty(&ready_list)){
+      //   struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
+      //   if(highest_priority_thread->priority > thread_current()->priority){
+      //     thread_yield();
+      //   }
+      // }
     }
   }
 
