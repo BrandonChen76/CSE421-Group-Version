@@ -226,13 +226,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
             break;
         }
     }
-
-  // if(ticks % TIMER_FREQ == 0){
-  //   update_all_recent_cpu();
-  //   update_load_avg();
-  // }
-  
-  
 }
 //---------------------------------------
 

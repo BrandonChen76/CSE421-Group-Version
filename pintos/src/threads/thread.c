@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "devices/timer.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -40,6 +41,9 @@ static struct lock tid_lock;
 
 //use for the load avg---------------------------------------------------------------------------------------
 static int load_avg;
+
+#define SCALAR 10000
+#define SCALAR2 1000
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -104,12 +108,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
   //initial--------------------------------------------------------------------------------------------------
-  initial_thread->nice = 0;
-  initial_thread->recent_cpu = 0;
   load_avg = 0;
-  
-  
-  
 }
 
 bool thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
@@ -185,6 +184,19 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+update_priority(struct thread *t){
+  enum intr_level old_level;
+  old_level = intr_disable();
+  t->priority = PRI_MAX - ((t->recent_cpu / (4 * SCALAR)) - (t->nice * 2));
+  if(t->priority < PRI_MIN){
+    t->priority = PRI_MIN;
+  }
+  intr_set_level(old_level);
+  // if(t->priority > thread_current()->priority){
+  //   thread_yield();
+  // }
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -202,9 +214,30 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  if(thread_mlfqs){
+    t->recent_cpu += SCALAR;
+
+    if(timer_ticks() % TIMER_FREQ == 0){
+      update_load_avg();
+      update_all_recent_cpu();
+    }
+    //Update priority every 4 ticks
+    if(timer_ticks() % 4 == 0){
+      thread_foreach(update_priority, NULL);
+      list_sort(&ready_list, thread_priority_compare, NULL);
+      if(!list_empty(&ready_list)){
+        struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
+        if(highest_priority_thread->priority > thread_current()->priority){
+          thread_yield();
+        }
+      }
+    }
+  }
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+
 }
 
 /* Prints thread statistics. */
@@ -461,12 +494,14 @@ thread_set_nice (int nice)
   }else if(nice < -20){
     nice = -20;
   }
-  
+  // enum intr_level old_level;
+  // old_level = intr_disable();
   struct thread *t = thread_current();
   t->nice = nice;
 
   //calculate the priority to check does it need to get yield
-  thread_calculate_priority(t);
+  update_priority(t);
+  // intr_set_level(old_level);
   if(!list_empty(&ready_list)){
     struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
     if(highest_priority_thread->priority > t->priority){
@@ -485,6 +520,8 @@ thread_get_nice (void)
 //helper method to update load_avg per second by calling in timer_interrupt
 void 
 update_load_avg(void) {
+  enum intr_level old_level;
+  old_level = intr_disable();
   //find the number of ready_threads are runing and ready to run
   int ready_threads = list_size(&ready_list);
   if(thread_current() != idle_thread){
@@ -492,42 +529,38 @@ update_load_avg(void) {
   }
 
   //update the load_avg
-  load_avg = (59 / 60) * load_avg + (1 /60) * ready_threads;
+  load_avg = (((59 * load_avg) / 60) + ((ready_threads * SCALAR) / 60));
+  intr_set_level(old_level);
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  return load_avg * 100;
+  return load_avg / (SCALAR / 100);
 }
 
 //helper method to calculate recent_cpu for thread
 void
 calculate_recent_cpu(struct thread *t){
   if(t != idle_thread){
-    int a = (2 * load_avg) / (2 * load_avg + 1);
-    t-> recent_cpu = a * t->recent_cpu + t->nice;
+    //a is scaled by SCALAR
+    int a = (2 * load_avg * SCALAR2) / (2 * load_avg + SCALAR);
+    t->recent_cpu = (((a * t->recent_cpu) / SCALAR2) + (t->nice * SCALAR));
   }
 }
 
 //helper method to update recent_cpu per second for all threads by calling in timer_interrupt
 void
 update_all_recent_cpu(void){
-  struct list_elem *e;
-  
-  for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)){
-    struct thread *t = list_entry(e, struct thread, allelem);
-    calculate_recent_cpu(t);
-  }
-
+  thread_foreach(calculate_recent_cpu, NULL);
 }
+
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return thread_current()->recent_cpu * 100;
-
+  return (thread_current()->recent_cpu / (SCALAR / 100));
 }
 
 
@@ -630,6 +663,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->original_priority = priority;
   list_init(&t->donation_list);
   t->waiting_lock = NULL;
+
+  t->recent_cpu = 0;
+  t->nice = 0;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
