@@ -26,7 +26,7 @@ struct arguments {
 };
 
 static thread_func start_process NO_RETURN;
-static bool load (const struct arguments *arguments_, void (**eip) (void), void **esp);
+static bool load (struct arguments *input, void (**eip) (void), void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -232,7 +232,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const struct arguments *input, void (**eip) (void), void **esp) 
+load (struct arguments *input, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -492,6 +492,7 @@ setup_stack (struct arguments *input, void **esp)
         memcpy(esp, &zero, offset);
 
         void *temp_esp = PHYS_BASE;
+        void *true_esp = *esp;
         //argv with null termination
         size_t size = sizeof(*arg);
 
@@ -499,12 +500,15 @@ setup_stack (struct arguments *input, void **esp)
         *esp = *esp - size;
         memcpy(esp, &zero, size);
 
-        //argv contents
+        *esp = *esp - (4 * size);
+        //argv contents start on argv[0] and work back up the stack
         for (token = strtok_r (arg, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
           temp_esp = temp_esp - strlen(token) + 1;
-          *esp = *esp - size;
+          true_esp = true_esp - size;
           memcpy(esp, temp_esp, size);
+          *esp = *esp + size;
         }
+        *esp = true_esp;
 
         //*argv[]
         temp_esp = esp;
@@ -513,7 +517,7 @@ setup_stack (struct arguments *input, void **esp)
 
         //argc
         *esp = *esp - (size_t)sizeof(argc);
-        memcpy(esp, argc, sizeof(argc));
+        memcpy(esp, &argc, sizeof(argc));
 
         //return address?
         *esp = *esp - size;
