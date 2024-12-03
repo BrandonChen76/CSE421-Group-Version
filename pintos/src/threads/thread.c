@@ -225,12 +225,6 @@ thread_tick (void)
     if(timer_ticks() % TIME_SLICE == 0){
       thread_foreach(update_priority, NULL);
       list_sort(&ready_list, thread_priority_compare, NULL);
-      // if(!list_empty(&ready_list)){
-      //   struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
-      //   if(highest_priority_thread->priority > thread_current()->priority){
-      //     thread_yield();
-      //   }
-      // }
     }
   }
 
