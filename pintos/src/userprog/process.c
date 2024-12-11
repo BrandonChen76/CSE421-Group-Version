@@ -483,45 +483,45 @@ setup_stack (struct arguments *input, void **esp)
         for (token = strtok_r (arg, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
           //tokenize arg_untoken, then update esp include \0, then copy mem
           *esp = *esp - strlen(token) + 1;
-          memcpy(esp, token, strlen(token) + 1);
+          strlcpy(esp, token, strlen(token) + 1);
         }
 
         //align
-        size_t offset = (size_t)*esp & 0b11;
-        *esp = *esp - offset;
-        memcpy(esp, &zero, offset);
+        size_t offset = (int)*esp & 0b11;
+        for(int i = 0; i < offset; i++){
+          *esp = *esp - 1;
+          *(uint8_t*)*esp = 0; //(treat as type, then * to change value as type)
+        }
 
         void *temp_esp = PHYS_BASE;
-        void *true_esp = *esp;
         //argv with null termination
         size_t size = sizeof(*arg);
 
-        //null terminator
-        *esp = *esp - size;
-        memcpy(esp, &zero, size);
+        //null terminator for argv
+        *esp = *esp - 4;
+        *(int*)*esp = 0;
 
-        *esp = *esp - (4 * size);
+
+        *esp = *esp + (argc * 4);
         //argv contents start on argv[0] and work back up the stack
         for (token = strtok_r (arg, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
-          temp_esp = temp_esp - strlen(token) + 1;
-          true_esp = true_esp - size;
-          memcpy(esp, temp_esp, size);
-          *esp = *esp + size;
+          temp_esp = temp_esp - strlen(token) + 1; //now temp_esp points to first char string
+          *(int*)*esp = (int)temp_esp;
+          *esp = *esp + 4;
         }
-        *esp = true_esp;
+        *esp = *esp - (argc * 4);
 
         //*argv[]
-        temp_esp = esp;
-        *esp = *esp - size;
-        memcpy(esp, temp_esp, size);
+        *esp = *esp - 4;
+        *(int*)*esp = *esp + 4;
 
         //argc
-        *esp = *esp - (size_t)sizeof(argc);
-        memcpy(esp, &argc, sizeof(argc));
+        *esp = *esp - 4;
+        *(int*)*esp = argc;
 
         //return address?
-        *esp = *esp - size;
-        memcpy(esp, &zero, size);
+        *esp = *esp - 4;
+        *(int*)*esp = 0;
 
       }
       else
