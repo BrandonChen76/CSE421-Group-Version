@@ -39,6 +39,8 @@ process_execute (const char *input) //change to input which includes file name
   struct arguments arguments;
   tid_t tid;
 
+  struct thread *cur = thread_current();
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   input_copy = palloc_get_page (0);
@@ -66,6 +68,9 @@ process_execute (const char *input) //change to input which includes file name
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, &arguments);
+
+  sema_down(cur->waiting_lock);
+
   if (tid == TID_ERROR)
     palloc_free_page (input_copy); 
   return tid;
@@ -86,6 +91,7 @@ start_process (void *input)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (arguments, &if_.eip, &if_.esp);
+  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (arguments);
