@@ -91,6 +91,8 @@ start_process (void *input)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (arguments, &if_.eip, &if_.esp);
+
+  printf("hex_dump call\n");
   hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
@@ -120,6 +122,7 @@ start_process (void *input)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while(true){}
   return -1;
 }
 
